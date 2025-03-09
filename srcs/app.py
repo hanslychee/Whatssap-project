@@ -1,7 +1,8 @@
 import streamlit as st
-import srcs.preprocessor as preprocessor, srcs.helper as helper
+import preprocessor, helper
 import matplotlib.pyplot as plt
 import seaborn as sns
+from wordcloud import WordCloud
 
 # Theme customization
 st.set_page_config(page_title="Whatsapp Chat Analyzer", layout="wide")
@@ -20,18 +21,20 @@ uploaded_file = st.sidebar.file_uploader("Choose a file")
 if uploaded_file is not None:
     bytes_data = uploaded_file.getvalue()
     data = bytes_data.decode("utf-8")
-    df = preprocessor.preprocess(data)
-
-    # fetch unique users
+    df, topics = preprocessor.preprocess(data)  # Get topics from preprocess
+    file_name = uploaded_file.name.split('.')[0]
+    # Fetch unique users
     user_list = df['user'].unique().tolist()
     user_list.sort()
     user_list.insert(0, "Overall")
 
-    selected_user = st.sidebar.selectbox("Show analysis wrt", user_list)
+    # Add a selectbox for user selection
+    selected_user = st.sidebar.selectbox("Show analysis for", user_list, index=0)
 
-    if st.sidebar.button("Show Analysis"):
-
-        # Stats Area
+    # Display the overall analysis by default
+    st.title("Overall Analysis")
+    with st.expander("Show Analysis", expanded=True):
+        # Perform analysis for the selected user
         num_messages, words, num_media_messages, num_links = helper.fetch_stats(selected_user, df)
         st.title("Top Statistics")
         col1, col2, col3, col4 = st.columns(4)
@@ -129,6 +132,44 @@ if uploaded_file is not None:
         # Emoji analysis
         emoji_df = helper.emoji_helper(selected_user, df)
         st.title("Emoji Analysis")
+         # Convert month names to abbreviated format (e.g., "June" -> "Jun")
+        # month_map = {
+        #         'January': 'Jan', 'February': 'Feb', 'March': 'Mar', 'April': 'Apr',
+        #         'May': 'May', 'June': 'Jun', 'July': 'Jul', 'August': 'Aug',
+        #         'September': 'Sep', 'October': 'Oct', 'November': 'Nov', 'December': 'Dec'
+        #     }
+        # df['month'] = df['month'].map(month_map)
+
+        #     # Group by month and sentiment
+        # monthly_sentiment = df.groupby(['month', 'sentiment']).size().unstack(fill_value=0)
+
+        #     # Plotting: Histogram (Bar Chart) for each sentiment
+        # st.write("### Sentiment Count by Month (Histogram)")
+
+        #     # Create a figure with subplots for each sentiment
+        # fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+        #     # Plot Positive Sentiment
+        # axes[0].bar(monthly_sentiment.index, monthly_sentiment['positive'], color='green')
+        # axes[0].set_title('Positive Sentiment')
+        # axes[0].set_xlabel('Month')
+        # axes[0].set_ylabel('Count')
+
+        #     # Plot Neutral Sentiment
+        # axes[1].bar(monthly_sentiment.index, monthly_sentiment['neutral'], color='blue')
+        # axes[1].set_title('Neutral Sentiment')
+        # axes[1].set_xlabel('Month')
+        # axes[1].set_ylabel('Count')
+
+        #     # Plot Negative Sentiment
+        # axes[2].bar(monthly_sentiment.index, monthly_sentiment['negative'], color='red')
+        # axes[2].set_title('Negative Sentiment')
+        # axes[2].set_xlabel('Month')
+        # axes[2].set_ylabel('Count')
+
+            # Display the plots in Streamlit
+        st.pyplot(fig)
+
 
         col1, col2 = st.columns(2)
 
@@ -139,3 +180,32 @@ if uploaded_file is not None:
             ax.pie(emoji_df[1].head(), labels=emoji_df[0].head(), autopct="%0.2f")
             ax.set_title("Emoji Distribution")
             st.pyplot(fig)
+            # Summary with sentences
+        st.title(" Group Discussion Summary with Sentences")
+        summary = helper.get_summary_with_sentences(df, topics, file_name)
+        st.write(summary)
+        # Topic Visualization
+        st.title("Topic Visualization")
+        for i, topic in enumerate(topics):
+            st.subheader(f"Topic {i+1}")
+            st.write(", ".join(topic))    
+
+        # Plot the topic trends
+        plt.figure(figsize=(14, 8))
+        sns.lineplot(data=helper.visualize_topic_trends(df, topics))
+        plt.title('Topic Trends Over Time')
+        plt.xlabel('Time')
+        plt.ylabel('Number of Messages')
+        plt.xticks(rotation=45)
+        plt.legend(title='Topics', labels=[f"Topic {i+1}: {', '.join(topic)}" for i, topic in enumerate(topics)])
+        plt.tight_layout()
+        plt.show()
+    # Extract and display example sentences
+        example_sentences = helper.extract_example_sentences(df, topics)
+        st.subheader("Example Sentences Based on Topics:")
+        for topic, sentences in example_sentences.items():
+            st.subheader(topic)
+            for sentence in sentences:
+                st.write("- " + sentence)
+
+        
