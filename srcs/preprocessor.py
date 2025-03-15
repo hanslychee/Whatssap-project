@@ -1,6 +1,22 @@
 import re
 import pandas as pd
+import swifter
+from sentiment import process_dataframe_sentiment
 
+
+# Function to clean WhatsApp messages
+def clean_whatsapp_message(text):
+    if isinstance(text, float) and pd.isna(text):  # Check if it's NaN
+        return ""  # Remove empty messages
+    
+    text = str(text)  # Convert to string
+    text = re.sub(r'this message was deleted', '',   text) 
+    text = re.sub(r'http\S+', '', text)  # Remove URLs
+    text = re.sub(r'<media omitted>', '', text, flags=re.IGNORECASE)  # Remove media placeholders
+    text = re.sub(r'[^a-zA-ZÀ-ÿ\s]', '', text)  # Remove emojis & special characters (keep letters)
+    text = text.lower().strip()  # Convert to lowercase & remove extra spaces
+    
+    return text if len(text) > 1 else ""
 
 def preprocess(data):
     pattern = r"^(?P<Date>\d{1,2}/\d{1,2}/\d{2,4}),\s+(?P<Time>[\d:]+(?:\S*\s?[AP]M)?)\s+-\s+(?:(?P<Sender>.*?):\s+)?(?P<Message>.*)$"
@@ -54,7 +70,11 @@ def preprocess(data):
 
     df["user"] = users
     df["message"] = messages
+    # Convert text to lowercase
+    df['message'] = df['message'].str.lower()
 
+    # Convert 'message' column to string data type
+    df['message'] = df['message'].astype(str)
     # Drop original column
     df.drop(columns=["user_message"], inplace=True)
     df['year'] = df['date'].dt.year
@@ -62,7 +82,16 @@ def preprocess(data):
     df['day'] = df['date'].dt.day
     df['hour'] = df['date'].dt.hour
     df['minute'] = df['date'].dt.minute
+    df['message'] = df['message'].apply(clean_whatsapp_message) 
+     # Apply cleaning properly
+    #  drop all row that have null in the message column
+    df = df.dropna(subset=['message'])
 
+    new_df = df[['message']]
+
+    processed_df = process_dataframe_sentiment(new_df[['message']])   
+    print(processed_df)
+    # remove the rows that the language is unknown
+    processed_df = processed_df[processed_df['language'] != 'unknown']
+    print(processed_df)
     return df
-
-
