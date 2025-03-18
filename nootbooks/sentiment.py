@@ -8,6 +8,9 @@ ROBERTA_SUPPORTED_LANGUAGES = ('ar', 'en', 'fr', 'de', 'hi', 'it', 'es', 'pt')
 model = AutoModelForSequenceClassification.from_pretrained(MODEL)
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 config = AutoConfig.from_pretrained(MODEL)
+# Move model to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 # Save the model locally
 model.save_pretrained("./model")
@@ -28,33 +31,30 @@ def preprocess(text):
     return " ".join(new_text)
 
 
-def predict_sentiment(text: str) -> str:
-    """Predict sentiment of the input text."""
-    try:
-        if not text or not isinstance(text, str):
-            return "neutral"  # Default sentiment for invalid input
-        
-        # Preprocess the text
-        processed_text = preprocess(text)
-        
-        # Tokenize the text with truncation
-        encoded_input = tokenizer(
-            processed_text,
+def predict_sentiment(texts, batch_size=32):
+    """Predict sentiment for a batch of texts."""
+    sentiments = []
+    
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i + batch_size]
+        processed_texts = [preprocess(text) for text in batch_texts]
+
+        # Tokenize batch
+        encoded_inputs = tokenizer(
+            processed_texts,
             return_tensors='pt',
-            max_length=512,  # Truncate to the model's max length
+            max_length=512,
             truncation=True,
             padding=True
-        )
+        ).to(device)  # Move to GPU if available
         
-        # Get model output
+        # Get model predictions
         with torch.no_grad():
-            output = model(**encoded_input)
+            outputs = model(**encoded_inputs)
         
-        # Get predicted sentiment
-        index_of_sentiment = output.logits.argmax().item()
-        sentiment = config.id2label[index_of_sentiment]
-        
-        return sentiment
-    except Exception as e:
-        print(f"Error predicting sentiment: {e}")
-        return "neutral"  # Fallback sentiment
+        # Convert predictions to labels
+        batch_sentiments = [config.id2label[idx] for idx in outputs.logits.argmax(dim=1).tolist()]
+        sentiments.extend(batch_sentiments)
+    
+    return sentiments
+    
